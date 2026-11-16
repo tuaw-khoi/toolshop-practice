@@ -15,10 +15,10 @@ import pytest
 from playwright.sync_api import expect
 
 from pages.home_page import HomePage
+from pages.login_page import LoginPage
 
 
 # ---------------------------------------------------------------- B1.1 (together with the teacher)
-@pytest.mark.smoke
 @pytest.mark.ui
 def test_b1_1_search_keyword_shows_only_matching_products(page):
     """Goal: search filters the grid.
@@ -37,8 +37,10 @@ def test_b1_2_search_unknown_keyword_shows_no_results_message(page):
     """Goal: empty search state.
     Precondition: none.
     Expected: the message 'There are no products found.' and zero product cards."""
-    # TODO: search "zzz-no-such-tool", then 2 expects (message text, product count 0)
-    raise NotImplementedError("B1.2")
+    home = HomePage(page).open().search("zzz-no-such-tool")
+    expect(home.search_completed).to_be_visible()
+    expect(home.no_results).to_have_text("There are no products found.")
+    expect(home.product_names).to_have_count(0)
 
 
 # ---------------------------------------------------------------- B1.3
@@ -46,8 +48,10 @@ def test_b1_3_product_add_quantity_three_updates_cart_badge(page):
     """Goal: add-to-cart uses the chosen quantity.
     Precondition: product 'Claw Hammer' exists.
     Expected: toast 'Product added to shopping cart' and the cart badge shows 3."""
-    # TODO: HomePage(page).open().open_product("Claw Hammer") ... add_to_cart(quantity=3)
-    raise NotImplementedError("B1.3")
+    product = HomePage(page).open().open_product("Claw Hammer")
+    product.add_to_cart(quantity=3)
+    expect(product.toast).to_contain_text("Product added to shopping cart")
+    expect(product.cart_quantity).to_have_text("3")
 
 
 # ---------------------------------------------------------------- B1.4
@@ -55,9 +59,13 @@ def test_b1_4_cart_line_price_equals_unit_price_times_quantity(page):
     """Goal: cart arithmetic.
     Precondition: empty cart (a new context per test gives you one).
     Expected: line price = unit price x 2 and total = sum of the lines."""
-    # TODO: read the unit price on the product page BEFORE adding, then go_to_cart()
-    # Hint: compare floats with pytest.approx
-    raise NotImplementedError("B1.4")
+    product = HomePage(page).open().open_product("Claw Hammer")
+    unit_price = product.price()
+    cart = product.add_to_cart(quantity=2).go_to_cart()
+    expect(cart.product_titles).to_have_text("Claw Hammer")
+    expect(cart.quantities).to_have_value("2")
+    assert cart.line_totals() == [pytest.approx(unit_price * 2)]
+    assert cart.total_value() == pytest.approx(sum(cart.line_totals()))
 
 
 # ---------------------------------------------------------------- B1.5
@@ -66,15 +74,19 @@ def test_b1_5_login_wrong_password_shows_error(page):
     Precondition: an e-mail with no account. NEVER a shared account: Toolshop counts failed
     logins (failed_login_attempts) and can lock it for the whole class.
     Expected: 'Invalid email or password' and the URL still ends with /auth/login."""
-    # TODO: rewrite test_spaghetti_login_wrong_password with LoginPage
-    raise NotImplementedError("B1.5")
+    login = LoginPage(page).open().login("nobody-here@example.com", "wrong-password")
+    expect(login.error).to_have_text("Invalid email or password")
+    expect(page).to_have_url(re.compile(r"/auth/login$"))
 
 
 def test_b1_5_login_empty_form_shows_required_errors(page):
     """Goal: client-side validation.
     Precondition: none.
     Expected: 'Email is required' and 'Password is required'."""
-    raise NotImplementedError("B1.5")
+    login = LoginPage(page).open()
+    login.submit_button.click()
+    expect(login.email_error).to_have_text("Email is required")
+    expect(login.password_error).to_have_text("Password is required")
 
 
 # ---------------------------------------------------------------- B1.6
@@ -82,8 +94,12 @@ def test_b1_6_cart_continue_shopping_returns_to_home(page):
     """Goal: page objects chain: each action returns the next page object.
     Precondition: none.
     Expected: after 'Continue Shopping' the product grid is visible again."""
-    # TODO: one chain: HomePage(page).open().open_product("Hammer").add_to_cart().go_to_cart()
-    raise NotImplementedError("B1.6")
+    home = (HomePage(page).open()
+            .open_product("Claw Hammer")
+            .add_to_cart()
+            .go_to_cart()
+            .continue_to_shopping())
+    expect(home.product_names.first).to_be_visible()
 
 
 # ---------------------------------------------------------------- B1.7 (challenge)
@@ -92,5 +108,7 @@ def test_b1_7_sort_by_price_orders_products(page, order):
     """Goal: sorting.
     Precondition: none.
     Expected: prices on the first page are sorted in the chosen direction."""
-    # TODO: sort_by(order), wait for the element data-test="sorting_completed", then compare with sorted()
-    raise NotImplementedError("B1.7")
+    home = HomePage(page).open().sort_by(order)
+    expect(home.sorting_completed).to_be_visible()
+    prices = home.prices()
+    assert prices == sorted(prices, reverse=order == "price,desc")
