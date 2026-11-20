@@ -12,8 +12,7 @@ from pages.home_page import HomePage
 pytestmark = [pytest.mark.bdd, pytest.mark.ui]
 
 # Paths are relative to bdd_features_base_dir in pytest.ini (tests/buoi3/features)
-# TODO B3.4: add "cart.feature" here once you have written it
-scenarios("search.feature")
+scenarios("search.feature", "cart.feature")
 
 
 # ---------------------------------------------------------------- given (B3.1: read and run)
@@ -33,17 +32,49 @@ def search(home, keyword):
 def names_contain(home, keyword):
     expect(home.search_completed).to_be_visible()
     names = home.product_names.all_inner_texts()
-    assert names and all(keyword.lower() in n.lower() for n in names), names
+    assert names and all(keyword.lower() in name.lower() for name in names), names
 
 
-# ---------------------------------------------------------------- B3.2: the two missing steps
-# Run pytest first: pytest-bdd tells you exactly which step text has no definition.
-# TODO: @then('the search caption mentions "{keyword}"')
-# TODO: @then('I see the message "{message}"')
+# ---------------------------------------------------------------- B3.2
+@then(parsers.parse('the search caption mentions "{keyword}"'))
+def search_caption_mentions(home, keyword):
+    expect(home.search_caption).to_contain_text(keyword)
+
+
+@then(parsers.parse('I see the message "{message}"'))
+def empty_search_message(home, message):
+    expect(home.no_results).to_have_text(message)
 
 
 # ---------------------------------------------------------------- B3.4: steps for cart.feature
-# Hints:
-#   - "When I open the product ..." returns a ProductPage: use target_fixture="product_page"
-#   - read the unit price BEFORE adding to the cart and keep it: target_fixture="unit_price"
-#   - numbers in steps: parsers.parse("... quantity {quantity:d}")
+@when(parsers.parse('I open the product "{product}"'), target_fixture="product_page")
+def open_product(home, product):
+    return home.open_product(product)
+
+
+@when(parsers.parse("I add it to the cart with quantity {quantity:d}"), target_fixture="unit_price")
+def add_to_cart(product_page, quantity):
+    unit_price = product_page.price()
+    product_page.add_to_cart(quantity=quantity)
+    return unit_price
+
+
+@when("I view the shopping cart", target_fixture="cart")
+def view_cart(product_page):
+    return product_page.go_to_cart()
+
+
+@then(parsers.parse('the cart contains "{product}" with quantity {quantity:d}'))
+def cart_contains_product(cart, product, quantity):
+    expect(cart.product_titles).to_have_text(product)
+    expect(cart.quantities).to_have_value(str(quantity))
+
+
+@then(parsers.parse("its line price equals unit price times quantity {quantity:d}"))
+def cart_line_price(cart, unit_price, quantity):
+    assert cart.line_totals() == [pytest.approx(unit_price * quantity)]
+
+
+@then("the cart total equals the sum of line prices")
+def cart_total(cart):
+    assert cart.total_value() == pytest.approx(sum(cart.line_totals()))
